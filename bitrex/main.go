@@ -7,11 +7,17 @@ import (
 	"io/ioutil"
 	"sync"
 	"strings"
-
 	"fmt"
 )
 
 type (
+
+	ChannelStruct struct {
+		Market market
+		HistoryResponse historyResponse
+		OrderResponse orderResponse
+		SummaryResponse summaryResponse
+	}
 
 	ProcessedCurrency struct {
 		Name string
@@ -118,21 +124,22 @@ type (
 
 
 func getInfo(results []market) []ProcessedCurrency{
-	var wg sync.WaitGroup
 	var mainWg sync.WaitGroup
-	out := make(chan ProcessedCurrency)
-	//final := make(chan []ProcessedCurrency)
-
+	out := make(chan ProcessedCurrency, len(results))
 	mainWg.Add(len(results))
 	for _, markets := range(results) {
-		summary := make(chan summaryResponse)
-		orderBook := make(chan orderResponse)
-		marketHistory := make(chan historyResponse)
+		var wg sync.WaitGroup
+		summary := make(chan summaryResponse, 1)
+		orderBook := make(chan orderResponse, 1)
+		marketHistory := make(chan historyResponse, 1)
 		wg.Add(3)
+
+
 		go func(marketSym string) {
 			var myClient = &http.Client{}
-			queryUrl := strings.Join([]string{"https://bittrex.com/api/v1.1/public/getmarketsummary?market=",string(marketSym)}, "")
+			queryUrl := strings.Join([]string{"https://www.bittrex.com/api/v1.1/public/getmarketsummary?market=",string(marketSym)}, "")
 			req, err := http.NewRequest("GET", queryUrl, nil)
+			req.Close = true
 			req.Header.Add("Content-Type", "application/json")
 			response, err := myClient.Do(req)
 			if err != nil {
@@ -150,15 +157,15 @@ func getInfo(results []market) []ProcessedCurrency{
 					println(errr)
 				}
 				summary <- sumResponse
-				wg.Done()
 
 			}
 		}(markets.MarketName)
 
 		go func(marketSym string) {
 			var myClient = &http.Client{}
-			queryUrl := strings.Join([]string{"https://bittrex.com/api/v1.1/public/getorderbook?market=",string(marketSym),"&type=both"}, "")
+			queryUrl := strings.Join([]string{"https://www.bittrex.com/api/v1.1/public/getorderbook?market=",string(marketSym),"&type=both"}, "")
 			req, err := http.NewRequest("GET", queryUrl, nil)
+			req.Close = true
 			req.Header.Add("Content-Type", "application/json")
 			response, err := myClient.Do(req)
 			if err != nil {
@@ -175,15 +182,15 @@ func getInfo(results []market) []ProcessedCurrency{
 					println(errr)
 				}
 				orderBook <- orderResp
-				wg.Done()
 
 			}
 		}(markets.MarketName)
 
 		go func(marketSym string) {
 			var myClient = &http.Client{}
-			queryUrl := strings.Join([]string{"https://bittrex.com/api/v1.1/public/getmarkethistory?market=",string(marketSym)}, "")
+			queryUrl := strings.Join([]string{"https://www.bittrex.com/api/v1.1/public/getmarkethistory?market=",string(marketSym)}, "")
 			req, err := http.NewRequest("GET", queryUrl, nil)
+			req.Close = true
 			req.Header.Add("Content-Type", "application/json")
 			response, err := myClient.Do(req)
 			if err != nil {
@@ -200,34 +207,51 @@ func getInfo(results []market) []ProcessedCurrency{
 					println(errr)
 				}
 				marketHistory <- marketHist
-				wg.Done()
 
 			}
 		}(markets.MarketName)
 		go func(marketSym market) {
+
+			var summ summaryResponse
+			var orde orderResponse
+			var mark historyResponse
+
+			for result := range summary{
+				summ = result
+				close(summary)
+				wg.Done()
+			}
+			for result := range orderBook{
+				orde = result
+				close(orderBook)
+				wg.Done()
+			}
+			for result := range marketHistory{
+				mark = result
+				close(marketHistory)
+				wg.Done()
+			}
 			wg.Wait()
-			summ := <- summary
-			close(summary)
-			orde := <- orderBook
-			close(orderBook)
-			mark := <- marketHistory
-			close(marketHistory)
 			parsedResult := ProcessedCurrency{marketSym.MarketCurrencyLong, marketSym.BaseCurrencyLong, marketSym.BaseCurrency, marketSym.MarketCurrency, orde.Result.Buy, orde.Result.Sell, mark.Result, summ.Result[0].Volume, summ.Result[0].BaseVolume, summ.Result[0].TimeStamp, summ.Result[0].Last}
 
+
+
 			out <- parsedResult
-			mainWg.Done()
 		}(markets)
+
 
 	}
 	var finalArr []ProcessedCurrency
 	for result := range out{
 		finalArr = append(finalArr, result)
+		fmt.Println(result)
+		mainWg.Done()
 	}
 
-	go func() {
+	//go func() {
 		mainWg.Wait()
 		close(out)
-	}()
+	//}()
 
 
 
@@ -240,7 +264,8 @@ func getInfo(results []market) []ProcessedCurrency{
 func GetCurrencies() {
 	var myClient = &http.Client{}
 
-	req, err := http.NewRequest("GET", "https://bittrex.com/api/v1.1/public/getmarkets", nil)
+	req, err := http.NewRequest("GET", "https://www.bittrex.com/api/v1.1/public/getmarkets", nil)
+	req.Close = true
 	req.Header.Add("Content-Type", "application/json")
 	response, err := myClient.Do(req)
 	if err != nil {
@@ -257,9 +282,8 @@ func GetCurrencies() {
 			println(errr)
 		}
 
-		//var returnArray []ProcessedCurrency
 		for _, result := range getInfo(mResponse.Result) {
-			fmt.Printf("%T	\n",result)
+			fmt.Print(result)
 		}
 
 
