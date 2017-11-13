@@ -8,6 +8,7 @@ import (
 	"sync"
 	"strings"
 	"fmt"
+	"os"
 )
 
 type (
@@ -20,17 +21,17 @@ type (
 	}
 
 	ProcessedCurrency struct {
-		Name string
-		Base string
-		BaseCurrency string
-		MarketCurrency string
-		BuyOrders []BuyOrder
-		SellOrders []SellOrder
-		History []mHistory
-		Volume float32
-		BaseVolume float32
-		Time string
-		Price float32
+		Name string	`json:"name"`
+		Base string	`json:"base"`
+		BaseCurrency string	`json:"baseCurrency"`
+		MarketCurrency string	`json:"marketCurrency"`
+		BuyOrders []BuyOrder	`json:"buyOrders"`
+		SellOrders []SellOrder	`json:"sellOrders"`
+		History []mHistory	`json:"history"`
+		Volume float32	`json:"volume"`
+		BaseVolume float32	`json:"baseVolume"`
+		Time string	`json:"time"`
+		Price float32	`json:"price"`
 	}
 
 	mHistory struct {
@@ -73,8 +74,8 @@ type (
 	}
 
 	currency struct{
-		Symbol string
-		Used float32
+		Symbol string	`json:"symbol"`
+		Used float32	`json:"used"`
 	}
 
 	BuyOrder struct {
@@ -88,8 +89,8 @@ type (
 	}
 
 	orderResult struct {
-		Buy []BuyOrder
-		Sell []SellOrder
+		Buy []BuyOrder `json:"buyOrder"`
+		Sell []SellOrder `json::"sellOrder"`
 	}
 
 	orderResponse struct {
@@ -123,142 +124,6 @@ type (
 
 
 
-func getInfo(results []market) []ProcessedCurrency{
-	var mainWg sync.WaitGroup
-	out := make(chan ProcessedCurrency, len(results))
-	mainWg.Add(len(results))
-	for _, markets := range(results) {
-		var wg sync.WaitGroup
-		summary := make(chan summaryResponse, 1)
-		orderBook := make(chan orderResponse, 1)
-		marketHistory := make(chan historyResponse, 1)
-		wg.Add(3)
-
-
-		go func(marketSym string) {
-			var myClient = &http.Client{}
-			queryUrl := strings.Join([]string{"https://www.bittrex.com/api/v1.1/public/getmarketsummary?market=",string(marketSym)}, "")
-			req, err := http.NewRequest("GET", queryUrl, nil)
-			req.Close = true
-			req.Header.Add("Content-Type", "application/json")
-			response, err := myClient.Do(req)
-			if err != nil {
-				log.Fatal(err)
-			} else {
-
-				var sumResponse summaryResponse
-				defer response.Body.Close()
-				body, err := ioutil.ReadAll(response.Body)
-				if err != nil {
-					panic(err.Error())
-				}
-				errr := json.Unmarshal(body, &sumResponse)
-				if errr != nil{
-					println(errr)
-				}
-				summary <- sumResponse
-
-			}
-		}(markets.MarketName)
-
-		go func(marketSym string) {
-			var myClient = &http.Client{}
-			queryUrl := strings.Join([]string{"https://www.bittrex.com/api/v1.1/public/getorderbook?market=",string(marketSym),"&type=both"}, "")
-			req, err := http.NewRequest("GET", queryUrl, nil)
-			req.Close = true
-			req.Header.Add("Content-Type", "application/json")
-			response, err := myClient.Do(req)
-			if err != nil {
-				log.Fatal(err)
-			} else {
-				var orderResp orderResponse
-				defer response.Body.Close()
-				body, err := ioutil.ReadAll(response.Body)
-				if err != nil {
-					panic(err.Error())
-				}
-				errr := json.Unmarshal(body, &orderResp)
-				if errr != nil{
-					println(errr)
-				}
-				orderBook <- orderResp
-
-			}
-		}(markets.MarketName)
-
-		go func(marketSym string) {
-			var myClient = &http.Client{}
-			queryUrl := strings.Join([]string{"https://www.bittrex.com/api/v1.1/public/getmarkethistory?market=",string(marketSym)}, "")
-			req, err := http.NewRequest("GET", queryUrl, nil)
-			req.Close = true
-			req.Header.Add("Content-Type", "application/json")
-			response, err := myClient.Do(req)
-			if err != nil {
-				log.Fatal(err)
-			} else {
-				var marketHist historyResponse
-				defer response.Body.Close()
-				body, err := ioutil.ReadAll(response.Body)
-				if err != nil {
-					panic(err.Error())
-				}
-				errr := json.Unmarshal(body, &marketHist)
-				if errr != nil{
-					println(errr)
-				}
-				marketHistory <- marketHist
-
-			}
-		}(markets.MarketName)
-		go func(marketSym market) {
-
-			var summ summaryResponse
-			var orde orderResponse
-			var mark historyResponse
-
-			for result := range summary{
-				summ = result
-				close(summary)
-				wg.Done()
-			}
-			for result := range orderBook{
-				orde = result
-				close(orderBook)
-				wg.Done()
-			}
-			for result := range marketHistory{
-				mark = result
-				close(marketHistory)
-				wg.Done()
-			}
-			wg.Wait()
-			parsedResult := ProcessedCurrency{marketSym.MarketCurrencyLong, marketSym.BaseCurrencyLong, marketSym.BaseCurrency, marketSym.MarketCurrency, orde.Result.Buy, orde.Result.Sell, mark.Result, summ.Result[0].Volume, summ.Result[0].BaseVolume, summ.Result[0].TimeStamp, summ.Result[0].Last}
-
-
-
-			out <- parsedResult
-		}(markets)
-
-
-	}
-	var finalArr []ProcessedCurrency
-	for result := range out{
-		finalArr = append(finalArr, result)
-		fmt.Println(result)
-		mainWg.Done()
-	}
-
-	//go func() {
-		mainWg.Wait()
-		close(out)
-	//}()
-
-
-
-	return finalArr
-
-
-}
 
 
 func GetCurrencies() {
@@ -282,10 +147,184 @@ func GetCurrencies() {
 			println(errr)
 		}
 
-		for _, result := range getInfo(mResponse.Result) {
-			fmt.Print(result)
+		//result := getInfo(mResponse.Result)
+		//fmt.Print(result)
+		results := mResponse.Result
+		var mainWg sync.WaitGroup
+		mainWg.Add(len(results))
+		out := make(chan ProcessedCurrency, len(results))
+		for _, markets := range(results) {
+			var wg sync.WaitGroup
+			summary := make(chan summaryResponse, 1)
+			orderBook := make(chan orderResponse, 1)
+			marketHistory := make(chan historyResponse, 1)
+			wg.Add(3)
+
+
+			go func(marketSym string) {
+				var myClient = &http.Client{}
+				queryUrl := strings.Join([]string{"https://www.bittrex.com/api/v1.1/public/getmarketsummary?market=",string(marketSym)}, "")
+				req, err := http.NewRequest("GET", queryUrl, nil)
+				req.Close = true
+				req.Header.Add("Content-Type", "application/json")
+				response, err := myClient.Do(req)
+				if err != nil {
+					log.Fatal(err)
+				} else {
+
+					var sumResponse summaryResponse
+					defer response.Body.Close()
+					body, err := ioutil.ReadAll(response.Body)
+					if err != nil {
+						panic(err.Error())
+					}
+					errr := json.Unmarshal(body, &sumResponse)
+					if errr != nil{
+						println(errr)
+					}
+					summary <- sumResponse
+
+				}
+			}(markets.MarketName)
+
+			go func(marketSym string) {
+				var myClient = &http.Client{}
+				queryUrl := strings.Join([]string{"https://www.bittrex.com/api/v1.1/public/getorderbook?market=",string(marketSym),"&type=both"}, "")
+				req, err := http.NewRequest("GET", queryUrl, nil)
+				req.Close = true
+				req.Header.Add("Content-Type", "application/json")
+				response, err := myClient.Do(req)
+				if err != nil {
+					log.Fatal(err)
+				} else {
+					var orderResp orderResponse
+					defer response.Body.Close()
+					body, err := ioutil.ReadAll(response.Body)
+					if err != nil {
+						panic(err.Error())
+					}
+					errr := json.Unmarshal(body, &orderResp)
+					if errr != nil{
+						println(errr)
+					}
+					orderBook <- orderResp
+
+				}
+			}(markets.MarketName)
+
+			go func(marketSym string) {
+				var myClient = &http.Client{}
+				queryUrl := strings.Join([]string{"https://www.bittrex.com/api/v1.1/public/getmarkethistory?market=",string(marketSym)}, "")
+				req, err := http.NewRequest("GET", queryUrl, nil)
+				req.Close = true
+				req.Header.Add("Content-Type", "application/json")
+				response, err := myClient.Do(req)
+				if err != nil {
+					log.Fatal(err)
+				} else {
+					var marketHist historyResponse
+					defer response.Body.Close()
+					body, err := ioutil.ReadAll(response.Body)
+					if err != nil {
+						panic(err.Error())
+					}
+					errr := json.Unmarshal(body, &marketHist)
+					if errr != nil{
+						println(errr)
+					}
+					marketHistory <- marketHist
+
+				}
+			}(markets.MarketName)
+			go func(marketSym market) {
+
+				var summ summaryResponse
+				var orde orderResponse
+				var mark historyResponse
+
+				for result := range summary{
+					summ = result
+					close(summary)
+					wg.Done()
+				}
+				for result := range orderBook{
+					orde = result
+					close(orderBook)
+					wg.Done()
+				}
+				for result := range marketHistory{
+					mark = result
+					close(marketHistory)
+					wg.Done()
+				}
+				wg.Wait()
+				parsedResult := ProcessedCurrency{marketSym.MarketCurrencyLong, marketSym.BaseCurrencyLong, marketSym.BaseCurrency, marketSym.MarketCurrency, orde.Result.Buy, orde.Result.Sell, mark.Result, summ.Result[0].Volume, summ.Result[0].BaseVolume, summ.Result[0].TimeStamp, summ.Result[0].Last}
+
+
+
+				out <- parsedResult
+			}(markets)
+			//time.Sleep(0020 * time.Millisecond)
+
+
+		}
+		var finalArr []ProcessedCurrency
+		counter := 0
+
+		go func() {
+			mainWg.Wait()
+			close(out)
+		}()
+
+		for result := range out{
+			finalArr = append(finalArr, result)
+			//var finalArr2 []ProcessedCurrency
+			//finalArr2, err := json.Marshal(finalArr)
+			//if err != nil {
+			//	println(err)
+			//}
+
+			counter ++
+			//fmt.Println(result)
+			//fmt.Print("aaaaaa")
+			mainWg.Done()
+			fmt.Print(counter)
+			if counter == 167{
+				fmt.Println("ss")
+			}
+			if counter == 267{
+				fmt.Println("ss")
+			}
+
+			//print(len(results))
 		}
 
+		//fmt.Println(finalArr)
+		jsonData, err := json.Marshal(finalArr)
+
+		if err != nil {
+			panic(err)
+		}
+
+		// sanity check
+
+		// write to JSON file
+
+		jsonFile, err := os.Create("./Results.json")
+
+		if err != nil {
+			panic(err)
+		}
+		defer jsonFile.Close()
+
+		jsonFile.Write(jsonData)
+		jsonFile.Close()
+		fmt.Println("JSON data written to ", jsonFile.Name())
+
+
+		//go func() {
+
+		//}()
 
 
 
