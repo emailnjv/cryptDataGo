@@ -51,9 +51,9 @@ func GetMarketHistory(marketSym string) HistoryResponse {
 		panic(err.Error())
 	}
 
-	errr := json.Unmarshal(body, &marketHist)
-	if errr != nil {
-		println(errr)
+	errs := json.Unmarshal(body, &marketHist)
+	if errs != nil {
+		println(errs)
 	}
 
 	response.Body.Close()

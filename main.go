@@ -1,3 +1,4 @@
+package main
 // // This program provides a sample application for using MongoDB with
 // // the mgo driver.
 // package main

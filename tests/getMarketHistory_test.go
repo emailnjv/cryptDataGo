@@ -3,6 +3,7 @@ package tests
 import (
 	"testing"
 	"../bittrex"
+	"fmt"
 )
 
 func TestGetMarketHistory(t *testing.T) {
@@ -10,5 +11,7 @@ func TestGetMarketHistory(t *testing.T) {
 	actual := bittrex.GetOrderBook("USDT-XRP")
 	if actual.Success != true {
 		t.Errorf("Test failed, expected: '%t', got:  '%t'", expected, actual.Success)
+	}else {
+		fmt.Println(actual.Result)
 	}
 }

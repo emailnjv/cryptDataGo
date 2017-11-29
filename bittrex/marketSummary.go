@@ -11,6 +11,7 @@ import (
 type (
 
 	// MSummary is the basic structure for the summary api call
+	//Contains all info returned in results
 	MSummary struct {
 		MarketName     string  `json:"marketName"`
 		High           float32 `json:"high"`
@@ -56,10 +57,11 @@ func GetSummary(marketSym string) SummaryResponse {
 	if err != nil {
 		panic(err.Error())
 	}
-	errr := json.Unmarshal(body, &sumResponse)
-	if errr != nil {
-		println(errr)
+	errs := json.Unmarshal(body, &sumResponse)
+	if errs != nil {
+		println(errs)
 	}
 
+	//Return response
 	return sumResponse
 }
